@@ -47,6 +47,6 @@ ATTENTION: to use our method, first download the FGNSR MATLAB framework, compile
 
 ## References
 
-[1]: Gillis, N., & Luce, R. (2018). A Fast Gradient Method for Nonnegative Sparse Regression With Self-Dictionary. IEEE Transactions on Image Processing, 27(1), 24–37. \\
+[1]: Gillis, N., & Luce, R. (2018). A Fast Gradient Method for Nonnegative Sparse Regression With Self-Dictionary. IEEE Transactions on Image Processing, 27(1), 24–37. \
 
-[2]: Nadisic, N.,  Gillis, N., Kervazo, C. Smoothed Separable Nonnegative Matrix Factorization. Linear Algebra and Its Applications 676, pp. 174-204, 2023. 
+[2]: Nadisic, N., &  Gillis, N., & Kervazo, C. Smoothed Separable Nonnegative Matrix Factorization. Linear Algebra and Its Applications 676, pp. 174-204, 2023. 
