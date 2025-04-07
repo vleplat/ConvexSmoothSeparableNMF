@@ -40,7 +40,7 @@ ATTENTION: to use our method, first download the FGNSR MATLAB framework, compile
  
  Test files are available. To proceed, open and start one of the following files:
  
-- test_script_Synthetic_Diri.m : run demo for Synthetic test with M = W*[H0 H1] + N, where H0 has disjoint row supports and H1 follows a Dirichklet Distribition, see Section 6.1 of the paper. 
+- test_script_Synthetic_Diri.m : run demo for Synthetic test with M = W*[H0 H1] + N, where H0 has disjoint row supports and H1 follows a Dirichlet Distribition, see Section 6.1 of the paper. 
 - test_script_Synthetic_Outliers.m : run demo for the comparison of aggregation techniques, that is mean vs median, see Section 6.2 of the paper. 
 - test_script_Synthetic_Middle.m : run additional test, dubbed as Middle points and adversarial noise, check the content of the file to get the details.
 - test_script_HSI_XX.m : run demo for Hyperspectral Image Unmixing for three data sets XX={JasperRidge, Urban, Samson}, section 6.2 of the paper.
