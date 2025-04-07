@@ -44,3 +44,8 @@ ATTENTION: to use our method, first download the FGNSR MATLAB framework, compile
 - test_script_Synthetic_Outliers.m : run demo for the comparison of aggregation techniques, that is mean vs median, see Section 6.2 of the paper. 
 - test_script_Synthetic_Middle.m : run additional test, dubbed as Middle points and adversarial noise, check the content of the file to get the details.
 - test_script_HSI_XX.m : run demo for Hyperspectral Image Unmixing for three data sets XX={JasperRidge, Urban, Samson}, section 6.2 of the paper.
+
+## References
+
+[1]: Gillis, N., & Luce, R. (2018). A Fast Gradient Method for Nonnegative Sparse Regression With Self-Dictionary. IEEE Transactions on Image Processing, 27(1), 24–37.
+[2]: Nadisic, N.,  Gillis, N., Kervazo, C. Smoothed Separable Nonnegative Matrix Factorization. Linear Algebra and Its Applications 676, pp. 174-204, 2023. 
