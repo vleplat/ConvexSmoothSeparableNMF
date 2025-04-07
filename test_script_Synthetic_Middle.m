@@ -114,7 +114,7 @@ nplp = round(nplp/r); % 1/r \sum_t p_t
 
 for i=1:d
     %%%%%%----------------------------------%%%%%%
-    %%%%%% add the noise for Case 1 and Case 2%%%%
+    %%%%%%          Add the noise           %%%%%%
     %%%%%%----------------------------------%%%%%%
     if flag_noise
         Noise=randn(m,n); 
@@ -141,7 +141,7 @@ for i=1:d
     end
     
     %%%%%%----------------------------------%%%%%%
-    %%%%%%  normalization of M %%%%%%
+    %%%%%%   Posterior normalization of M   %%%%%%
     %%%%%%----------------------------------%%%%%%
     if choice_norm == 2
         % M=M./sqrt(sum(M.^2));
@@ -247,7 +247,7 @@ end
 
 end
 %%-------------------------------------------------------------------------
-%% post-processing
+%% Post-processing
 %%-------------------------------------------------------------------------
 yourFolder = 'Outputs_script';
 if not(isfolder(yourFolder))
@@ -323,7 +323,7 @@ grid on;
 savefig(fig(3),"Outputs_script/Aver_distW.fig")
 
 %%%------------------%%%
-%%%   Lowest plots   %%%
+%%%   Min plots      %%%
 %%%------------------%%%
 
 %%% Relative Frobenius errors

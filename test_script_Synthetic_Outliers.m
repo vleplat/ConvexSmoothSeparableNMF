@@ -61,7 +61,7 @@ options.clustering = 0;
 
 for i=1:d
     %%%%%%----------------------------------%%%%%%
-    %%%%%% add the noise for Case 1 and Case 2%%%%
+    %%%%%%          Add the noise           %%%%%%
     %%%%%%----------------------------------%%%%%%
     if flag_outliers
         numoutliers = outliers(i);
@@ -69,7 +69,7 @@ for i=1:d
     end
     
     %%%%%%----------------------------------%%%%%%
-    %%%%%%  normalization of M              %%%%%%
+    %%%%%%   Posterior normalization of M   %%%%%%
     %%%%%%----------------------------------%%%%%%
     if choice_norm == 2
         % M=M./sqrt(sum(M.^2));
@@ -91,7 +91,7 @@ end
 
 end
 %%-------------------------------------------------------------------------
-%% post-processing
+%% Post-processing
 %%-------------------------------------------------------------------------
 yourFolder = 'Outputs_script';
 if not(isfolder(yourFolder))
@@ -106,7 +106,7 @@ font_size = 16;
 fig(1) = figure;
 errorbar(outliers,mean(err_alg1_av,1),std(err_alg1_av,1),'-x','LineWidth',2)
 hold on
-errorbar(outliers,mean(err_alg1_med,1),std(err_alg1_med,1),'-*','LineWidth',2)
+errorbar(outliers,mean(err_alg1_med,1),std(err_alg1_med,1),'-.','LineWidth',2)
 text{1} = 'Alg.1 - Average';
 text{2} = 'Alg.1 - Median';
 xlabel('number of outliers','Interpreter','latex','FontSize',font_size);
@@ -127,7 +127,7 @@ font_size = 14;
 fig(2) = figure;
 plot(outliers,min(err_alg1_av),'-x','LineWidth',2)
 hold on
-plot(outliers,min(err_alg1_med),'-*','LineWidth',2)
+plot(outliers,min(err_alg1_med),'-.','LineWidth',2)
 text{1} = 'Alg.1 - Average';
 text{2} = 'Alg.1 - Median';
 xlabel('number of outliers','Interpreter','latex','FontSize',font_size);

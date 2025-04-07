@@ -2,7 +2,7 @@ addpath(genpath(pwd));
 clc
 clear
 disp('----------------------------------------------------------------------------------------------------------')
-disp("HSI test - Urban data set - Paper Section 5 ")
+disp("HSI test - Urban data set - Paper Section 6 ")
 disp("The computation of X can take approximatively 45 minutes on a recent laptop...")
 disp("You can directly load the .mat ./Results/HSI/Urban and start playing with the code starting from line 55")
 disp('----------------------------------------------------------------------------------------------------------')
