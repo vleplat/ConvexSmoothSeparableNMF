@@ -32,6 +32,8 @@ The baseline algorithms used in the manuscript are courtesy of their respective 
  - /Methods: contains the MatLab implementations of the Algorithms 1 and 2 developped in the paper. 
 
  - test files detailed in next Section
+
+ATTENTION: to use our method, first download the FGNSR MATLAB framework, compile the mex files for your computer. Finally, copy paste the file "fgnsr_alg1_copy_to_move_later.m" to ./Libraries/FGNSR-master/matlab, and rename it in "fgnsr_alg1.m"
    
 ## Test files
  
