@@ -22,7 +22,7 @@ res_sspa=zeros(iter,d);  err_sspa=zeros(iter,d); distW_sspa=zeros(iter,d);
 %%Initial setting
 flag_noise = 1; 
 %%ATTENTION: Choose HERE the kind of normalization
-choice_norm = 1;  
+choice_norm = 2;  
   % 0 - Assumption 1 from the paper (not relevant anymore)
   % 1 - prior l-1 normalisation
   % 2 - posterior l-1 normalisation (for l-2, uncomment line 157) 

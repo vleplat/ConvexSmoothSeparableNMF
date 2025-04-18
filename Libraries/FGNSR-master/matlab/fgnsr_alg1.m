@@ -265,8 +265,7 @@ for k=1:ns
 end
 
 % Estimate Lipschitz constant L 
-L = svds(Ms,1)^2;
-step_len = 1/L;
+L0 = svds(Ms,1)^2;
 
 % Preallocate some array
 fval_hist = -1 * ones(maxiter+1,1);
@@ -299,7 +298,7 @@ if verbose == true
     fprintf('Ms''Ms has %d NZ, density %.3f, fill %.2f\n', ...
         nnz(MstMs), nnz(MstMs)/(ns*ns), nnz(MstMs)/nnz(Ms));
     
-    fprintf('Estimated Lipschitz constant is %.2e\n', L);
+    fprintf('Estimated Lipschitz constant is %.2e\n', L0 + mu);
 
     if strcmp(target, 'trace')
         fprintf('Target trace value is %.2f\n', trX_target);
@@ -336,9 +335,9 @@ while num_iter < maxiter
     if strcmp(gradient, 'full')
         Xold = X;
 
-        % gradY = -MstM + MstMs * Y + mu * pmat;
         gradY = -MstM + MstMs * Y + mu*diag(diag(Y));
-        % mu
+        step_len = 1/(L0+mu);
+       
 
         % Update iterates
         X = proj_omega((Y - step_len * gradY)', w', 1, [], proj_type)'; 
