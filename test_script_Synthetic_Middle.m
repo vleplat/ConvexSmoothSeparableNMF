@@ -8,12 +8,12 @@ rng(2025);
 
 % Core dimensions
 m  = 30;        % ambient dimension
-r  = 10;         % number of endmembers / materials
+r  = 10;        % number of endmembers / materials
 n0 = 50;        % number of pure (one-hot) columns
 
 % Choose how to build middle points (H1)
-midpoint_mode = 'all';  % 'all' (use all nchoosek(r,2) pairs) or 'sampled'
-n1_requested  = 100;     % if 'sampled', set e.g. n1_requested = 15; otherwise [] is ignored
+midpoint_mode = 'all';   % 'all' (use all nchoosek(r,2) pairs) or 'sampled'
+n1_requested  = 100;     % if 'sampled', set e.g. n1_requested = 100; ignored for 'all'
 
 % Noise sweep and trials
 epsilon = logspace(-3, -0.05, 4);   % noise levels
@@ -30,7 +30,11 @@ choice_norm = 2;
 res_fgnsr   = zeros(iter,d); err_fgnsr   = zeros(iter,d); distW_fgnsr   = zeros(iter,d);
 res_spa     = zeros(iter,d); err_spa     = zeros(iter,d); distW_spa     = zeros(iter,d);
 res_alg1    = zeros(iter,d); err_alg1    = zeros(iter,d); distW_alg1    = zeros(iter,d);
-res_sspa    = zeros(iter,d); err_sspa    = zeros(iter,d); distW_sspa    = zeros(iter,d);
+
+% Three SSPA variants
+res_sspa_min  = zeros(iter,d); err_sspa_min  = zeros(iter,d); distW_sspa_min  = zeros(iter,d);
+res_sspa_mid  = zeros(iter,d); err_sspa_mid  = zeros(iter,d); distW_sspa_mid  = zeros(iter,d);
+res_sspa_mean = zeros(iter,d); err_sspa_mean = zeros(iter,d); distW_sspa_mean = zeros(iter,d);
 
 flag_noise  = 1;           % add adversarial noise on H1 block
 flag_onmf   = 0;           % 0: mixed model in postprocessing
@@ -39,12 +43,12 @@ flag_onmf   = 0;           % 0: mixed model in postprocessing
 options.delta      = 0.95;   % threshold for selecting K from X
 options.type       = 1;      % spectral clustering variant id
 options.modeltype  = 1 - flag_onmf;  % 1: NNLS (mixed), 0: alternating ONMF
-options.agregation = 1;      % 0: average, 1: median   (we use median here)
+options.agregation = 1;      % 0: average, 1: median   (median here)
 options.clustering = 0;      % 0: spectral, 1: kmeans
 
 for j = 1:iter
     % --- Pure block (H0) and middle-point block (H1) ---------------------
-    H0 = PB(n0, r, 1)';   % one-hot columns (size r x n0)
+    H0 = PB(n0, r, 1)';                                 % r x n0, one-hot
     [H1, n1_used] = build_midpoints_block(r, midpoint_mode, n1_requested);  % r x n1
     H  = [H0, H1];
     n  = n0 + n1_used;
@@ -52,34 +56,37 @@ for j = 1:iter
     % Draw W and (optionally) apply prior normalization
     W = rand(m, r);
     if choice_norm == 1
-        H = H ./ sum(H,1); 
+        H = H ./ sum(H,1);
         W = W ./ sum(W,1);
     elseif choice_norm == 0
         H = H ./ sum(H,1);  % legacy ONMF assumption on H
     end
 
-    M0 = W * H; 
+    M0 = W * H;
     U  = H ./ sum(H,1);     % column-stochastic version of H, for alignment
 
-    % SSPA: number of proximal latent points ~ average class size
-    p = sum(H0 > 0, 2);          % p(t) = # pure columns in class t
-    nplp_mean = round(mean(p));  % average class size  (default we used)
-    nplp_min  = max(1, min(p));  % conservative choice (never exceeds any class)
-
-    nplp = nplp_mean;            % or set nplp = nplp_min for a stricter setting
+    % SSPA: compute class sizes in H0 and derive three nplp settings
+    p          = sum(H0 > 0, 2);               % p_t = # of pure cols in class t
+    nplp_min   = max(1, min(p));               % conservative
+    nplp_mean  = round(mean(p));               % average class size
+    nplp_mid   = round((nplp_min + nplp_mean)/2);  % midpoint between min and mean
 
     for i = 1:d
         M = M0;  % fresh copy
 
         % --- Adversarial noise: none on H0, outward shift on H1 ----------
         if flag_noise
-            Noise          = zeros(m, n);
-            wbar           = mean(W * H0, 2);                           % centroid of pure block
-            Noise(:,1:n0)  = 0;                                         % no noise on pure
-            Noise(:,n0+1:end) = M0(:,n0+1:end) - wbar * ones(1, n1_used); % outward shift
-            % scale so that ||N||_F = eps * ||M0||_F
-            Noise = epsilon(i) * (Noise / norm(Noise, 'fro')) * norm(M0, 'fro');
-            M     = max(M0 + Noise, 0);
+            Noise             = zeros(m, n);
+            wbar              = mean(W * H0, 2);                           % centroid of pure block
+            Noise(:,1:n0)     = 0;                                         % no noise on pure
+            Noise(:,n0+1:end) = M0(:,n0+1:end) - wbar * ones(1, n1_used);  % outward shift
+            nf = norm(Noise, 'fro');
+            if nf > 0
+                Noise = epsilon(i) * (Noise / nf) * norm(M0, 'fro');       % scale to ||N||_F = eps||M0||_F
+            else
+                Noise = zeros(size(Noise));
+            end
+            M = max(M0 + Noise, 0);
         end
 
         % --- Posterior normalization of M (default) ----------------------
@@ -128,114 +135,158 @@ for j = 1:iter
         distW_spa(j,i) = norm(W_spa_re./sum(W_spa_re,1) - W./sum(W,1), 'fro') / ...
                          norm(W./sum(W,1), 'fro');
 
-        % =====================  SSPA  ====================================
-        [W_sspa, ~] = SSPA(M, r, nplp);
-        H_sspa      = nnlsHALSupdt_new(W_sspa' * M, W_sspa, [], 1000);
+        % =====================  SSPA variants ============================
+        % -- min --
+        [W_sspa_min, ~] = SSPA(M, r, nplp_min);
+        H_sspa_min      = nnlsHALSupdt_new(W_sspa_min' * M, W_sspa_min, [], 1000);
+        res_sspa_min(j,i) = norm(M - W_sspa_min * H_sspa_min, 'fro') / norm(M, 'fro');
+        H_sspa_min        = matchCol(H_sspa_min', U', W')';
+        [err_sspa_min(j,i), ~] = Compare_clustering(H_sspa_min(:,1:n0)', U(:,1:n0)', 0, ~flag_onmf);
+        W_sspa_min_re     = matchCol(W_sspa_min, W);
+        distW_sspa_min(j,i)= norm(W_sspa_min_re./sum(W_sspa_min_re,1) - W./sum(W,1), 'fro') / ...
+                             norm(W./sum(W,1), 'fro');
 
-        res_sspa(j,i) = norm(M - W_sspa * H_sspa, 'fro') / norm(M, 'fro');
+        % -- mid --
+        [W_sspa_mid, ~] = SSPA(M, r, nplp_mid);
+        H_sspa_mid      = nnlsHALSupdt_new(W_sspa_mid' * M, W_sspa_mid, [], 1000);
+        res_sspa_mid(j,i) = norm(M - W_sspa_mid * H_sspa_mid, 'fro') / norm(M, 'fro');
+        H_sspa_mid        = matchCol(H_sspa_mid', U', W')';
+        [err_sspa_mid(j,i), ~] = Compare_clustering(H_sspa_mid(:,1:n0)', U(:,1:n0)', 0, ~flag_onmf);
+        W_sspa_mid_re     = matchCol(W_sspa_mid, W);
+        distW_sspa_mid(j,i)= norm(W_sspa_mid_re./sum(W_sspa_mid_re,1) - W./sum(W,1), 'fro') / ...
+                             norm(W./sum(W,1), 'fro');
 
-        H_sspa         = matchCol(H_sspa', U', W')';
-        [err_sspa(j,i), ~] = Compare_clustering(H_sspa(:,1:n0)', U(:,1:n0)', 0, ~flag_onmf);
-
-        W_sspa_re      = matchCol(W_sspa, W);
-        distW_sspa(j,i)= norm(W_sspa_re./sum(W_sspa_re,1) - W./sum(W,1), 'fro') / ...
-                         norm(W./sum(W,1), 'fro');
+        % -- mean --
+        [W_sspa_mean, ~] = SSPA(M, r, nplp_mean);
+        H_sspa_mean      = nnlsHALSupdt_new(W_sspa_mean' * M, W_sspa_mean, [], 1000);
+        res_sspa_mean(j,i) = norm(M - W_sspa_mean * H_sspa_mean, 'fro') / norm(M, 'fro');
+        H_sspa_mean        = matchCol(H_sspa_mean', U', W')';
+        [err_sspa_mean(j,i), ~] = Compare_clustering(H_sspa_mean(:,1:n0)', U(:,1:n0)', 0, ~flag_onmf);
+        W_sspa_mean_re     = matchCol(W_sspa_mean, W);
+        distW_sspa_mean(j,i)= norm(W_sspa_mean_re./sum(W_sspa_mean_re,1) - W./sum(W,1), 'fro') / ...
+                              norm(W./sum(W,1), 'fro');
 
         % ------------------- quick console log ---------------------------
         disp('--------------------------------------------------------------------');
-        disp('-------------------   Alg.1 |   FGNSR   |   SSPA  ------------------');
-        fprintf('Rel. Frob Error : %2.4e | %2.4e | %2.4e\n', res_alg1(j,i), res_fgnsr(j,i), res_sspa(j,i));
-        fprintf('Clustering Err. : %2.4e | %2.4e | %2.4e\n', err_alg1(j,i), err_fgnsr(j,i), err_sspa(j,i));
-        fprintf('Rel. d(W#,W)    : %2.4e | %2.4e | %2.4e\n', distW_alg1(j,i), distW_fgnsr(j,i), distW_sspa(j,i));
+        disp('Alg.1 | FGNSR | SPA | SSPA(min) | SSPA(mid) | SSPA(mean)');
+        fprintf('Rel.Frob : %2.4e | %2.4e | %2.4e | %2.4e | %2.4e | %2.4e\n', ...
+            res_alg1(j,i), res_fgnsr(j,i), res_spa(j,i), res_sspa_min(j,i), res_sspa_mid(j,i), res_sspa_mean(j,i));
+        fprintf('ClustErr: %2.4e | %2.4e | %2.4e | %2.4e | %2.4e | %2.4e\n', ...
+            err_alg1(j,i), err_fgnsr(j,i), err_spa(j,i), err_sspa_min(j,i), err_sspa_mid(j,i), err_sspa_mean(j,i));
+        fprintf('Rel dW  : %2.4e | %2.4e | %2.4e | %2.4e | %2.4e | %2.4e\n', ...
+            distW_alg1(j,i), distW_fgnsr(j,i), distW_spa(j,i), distW_sspa_min(j,i), distW_sspa_mid(j,i), distW_sspa_mean(j,i));
         disp('--------------------------------------------------------------------');
     end
 end
 
-%% ------------------------------------------------------------------------
-%% Post-processing (same visuals as before; only legend text fixed)
-%% ------------------------------------------------------------------------
-outDir = 'Outputs_script'; if ~isfolder(outDir), mkdir(outDir); end
-close all;
+%%-------------------------------------------------------------------------
+%% Post-processing
+%%-------------------------------------------------------------------------
+yourFolder = 'Outputs_script';
+if ~isfolder(yourFolder), mkdir(yourFolder); end
+close all
 
-font_size = 14; 
-labels = {'FGNSR','SPA','Alg.1','SSPA'};
+font_size = 20;
 
-% Average: Relative Frobenius errors
+labels = {'FGNSR','SPA','Alg.1','SSPA(min)','SSPA(mid)','SSPA(mean)'};
+
+%% Average plots - Relative Frobenius errors
 fig(1) = figure;
-errorbar(epsilon, mean(res_fgnsr,1), std(res_fgnsr,1), '-x', 'LineWidth',2); hold on;
-errorbar(epsilon, mean(res_spa,1),   std(res_spa,1),   '-*', 'LineWidth',2);
-errorbar(epsilon, mean(res_alg1,1),  std(res_alg1,1),  '-',  'LineWidth',2);
-errorbar(epsilon, mean(res_sspa,1),  std(res_sspa,1),  '-.', 'LineWidth',2);
+errorbar(epsilon,mean(res_fgnsr,1),   std(res_fgnsr,1),   '-x','LineWidth',2); hold on
+errorbar(epsilon,mean(res_spa,1),     std(res_spa,1),     '-*','LineWidth',2);
+errorbar(epsilon,mean(res_alg1,1),    std(res_alg1,1),    '-', 'LineWidth',2);
+errorbar(epsilon,mean(res_sspa_min,1),std(res_sspa_min,1),'-.','LineWidth',2);
+errorbar(epsilon,mean(res_sspa_mid,1),std(res_sspa_mid,1),':', 'LineWidth',2);
+errorbar(epsilon,mean(res_sspa_mean,1),std(res_sspa_mean,1),'--','LineWidth',2);
 xlabel('level of noise - $\epsilon$','Interpreter','latex','FontSize',font_size);
-ylabel('$\| M - WH \|_F / \| M \|_F$','Interpreter','latex','FontSize',font_size);
-legend(labels,'Location','northwest','Orientation','horizontal','Interpreter','latex','FontSize',font_size);
-title('Average plots - Relative Frobenius Errors','Interpreter','latex','FontSize',font_size); grid on; set(gca,'XScale','log');
-savefig(fig(1), fullfile(outDir,'Aver_RelFro.fig'));
+ylabel('$\frac{\| M - WH \|_F}{\| M \|_F}$','Interpreter','latex','FontSize',font_size);
+legend(labels,'Location','northwest','Orientation','vertical','Interpreter','latex','FontSize',font_size)
+title('Average plots - Relative Frobenius Errors','Interpreter','latex','FontSize',font_size)
+grid on; set(gca,'XScale','log');
+savefig(fig(1), fullfile(yourFolder,"Aver_RelFro.fig"))
 
-% Average: Accuracy (1 - clustering error)
+%% Average plots - Accuracy
 fig(2) = figure;
-errorbar(epsilon, mean(1-err_fgnsr,1), std(1-err_fgnsr,1), '-x','LineWidth',2); hold on;
-errorbar(epsilon, mean(1-err_spa,1),   std(1-err_spa,1),   '-*','LineWidth',2);
-errorbar(epsilon, mean(1-err_alg1,1),  std(1-err_alg1,1),  '-', 'LineWidth',2);
-errorbar(epsilon, mean(1-err_sspa,1),  std(1-err_sspa,1),  '-.','LineWidth',2);
-ylim([0 1]);
+errorbar(epsilon,mean(1-err_fgnsr,1),   std(1-err_fgnsr,1),   '-x','LineWidth',2); hold on
+errorbar(epsilon,mean(1-err_spa,1),     std(1-err_spa,1),     '-*','LineWidth',2);
+errorbar(epsilon,mean(1-err_alg1,1),    std(1-err_alg1,1),    '-', 'LineWidth',2);
+errorbar(epsilon,mean(1-err_sspa_min,1),std(1-err_sspa_min,1),'-.','LineWidth',2);
+errorbar(epsilon,mean(1-err_sspa_mid,1),std(1-err_sspa_mid,1),':', 'LineWidth',2);
+errorbar(epsilon,mean(1-err_sspa_mean,1),std(1-err_sspa_mean,1),'--','LineWidth',2);
+ylim([0 1])
 xlabel('level of noise - $\epsilon$','Interpreter','latex','FontSize',font_size);
 ylabel('Accuracy','Interpreter','latex','FontSize',font_size);
-legend(labels,'Location','northwest','Orientation','horizontal','Interpreter','latex','FontSize',font_size);
-title('Average plots - Accuracy','Interpreter','latex','FontSize',font_size); grid on; set(gca,'XScale','log');
-savefig(fig(2), fullfile(outDir,'Aver_Acc.fig'));
+legend(labels,'Location','northwest','Orientation','vertical','Interpreter','latex','FontSize',font_size)
+title('Average plots - Accuracy','Interpreter','latex','FontSize',font_size)
+grid on; set(gca,'XScale','log');
+savefig(fig(2), fullfile(yourFolder,"Aver_Acc.fig"))
 
-% Average: Relative distance d(W#, W)
+%% Average plots - Relative distance ||W# - W||_F / ||W#||_F
 fig(3) = figure;
-semilogx(epsilon, mean(distW_fgnsr,1), '-x','LineWidth',2); hold on;
-semilogx(epsilon, mean(distW_spa,1),   '-*','LineWidth',2);
-semilogx(epsilon, mean(distW_alg1,1),  '-', 'LineWidth',2);
-semilogx(epsilon, mean(distW_sspa,1),  '-.','LineWidth',2);
-ylim([0 1]);
+semilogx(epsilon,mean(distW_fgnsr,1),    '-x','LineWidth',2); hold on
+semilogx(epsilon,mean(distW_spa,1),      '-*','LineWidth',2);
+semilogx(epsilon,mean(distW_alg1,1),     '-', 'LineWidth',2);
+semilogx(epsilon,mean(distW_sspa_min,1), '-.','LineWidth',2);
+semilogx(epsilon,mean(distW_sspa_mid,1), ':', 'LineWidth',2);
+semilogx(epsilon,mean(distW_sspa_mean,1),'--','LineWidth',2);
+ylim([0 1])
 xlabel('level of noise - $\epsilon$','Interpreter','latex','FontSize',font_size);
-ylabel('$\| W^\# - W \|_F / \| W^\# \|_F$','Interpreter','latex','FontSize',font_size);
-legend(labels,'Location','northwest','Orientation','horizontal','Interpreter','latex','FontSize',font_size);
-title('Average plots - Relative distance w.r.t. $W^\#$','Interpreter','latex','FontSize',font_size); grid on;
-savefig(fig(3), fullfile(outDir,'Aver_distW.fig'));
+ylabel('$\frac{\| W^\# - W \|_F}{\| W^\# \|_F}$','Interpreter','latex','FontSize',font_size);
+legend(labels,'Location','northwest','Orientation','vertical','Interpreter','latex','FontSize',font_size)
+title('Average plots - Relative distance w.r.t. $W^\#$','Interpreter','latex','FontSize',font_size)
+grid on;
+savefig(fig(3), fullfile(yourFolder,"Aver_distW.fig"))
 
-% Best (min or max across trials)
+%% Best among trials - Relative Frobenius errors
 fig(4) = figure;
-semilogx(epsilon, min(res_fgnsr), '-x','LineWidth',2); hold on;
-semilogx(epsilon, min(res_spa),   '-*','LineWidth',2);
-semilogx(epsilon, min(res_alg1),  '-', 'LineWidth',2);
-semilogx(epsilon, min(res_sspa),  '-.','LineWidth',2);
+semilogx(epsilon,min(res_fgnsr),    '-x','LineWidth',2); hold on
+semilogx(epsilon,min(res_spa),      '-*','LineWidth',2);
+semilogx(epsilon,min(res_alg1),     '-', 'LineWidth',2);
+semilogx(epsilon,min(res_sspa_min), '-.','LineWidth',2);
+semilogx(epsilon,min(res_sspa_mid), ':', 'LineWidth',2);
+semilogx(epsilon,min(res_sspa_mean),'--','LineWidth',2);
 xlabel('level of noise - $\epsilon$','Interpreter','latex','FontSize',font_size);
-ylabel('$\| M - WH \|_F / \| M \|_F$','Interpreter','latex','FontSize',font_size);
-legend(labels,'Location','northwest','Orientation','horizontal','Interpreter','latex','FontSize',font_size);
-title('Best among trials - Relative Frobenius Errors','Interpreter','latex','FontSize',font_size); grid on;
-savefig(fig(4), fullfile(outDir,'Best_RelFro.fig'));
+ylabel('$\frac{\| M - WH \|_F}{\| M \|_F}$','Interpreter','latex','FontSize',font_size);
+legend(labels,'Location','northwest','Orientation','vertical','Interpreter','latex','FontSize',font_size)
+title('Best among trials - Relative Frobenius Errors','Interpreter','latex','FontSize',font_size)
+grid on; set(gca,'XScale','log');
+savefig(fig(4), fullfile(yourFolder,"Best_RelFro.fig"))
 
+%% Best among trials - Accuracy
 fig(5) = figure;
-semilogx(epsilon, max(1-err_fgnsr), '-x','LineWidth',2); hold on;
-semilogx(epsilon, max(1-err_spa),   '-*','LineWidth',2);
-semilogx(epsilon, max(1-err_alg1),  '-', 'LineWidth',2);
-semilogx(epsilon, max(1-err_sspa),  '-.','LineWidth',2);
-ylim([0 1]);
+semilogx(epsilon,max(1-err_fgnsr),    '-x','LineWidth',2); hold on
+semilogx(epsilon,max(1-err_spa),      '-*','LineWidth',2);
+semilogx(epsilon,max(1-err_alg1),     '-', 'LineWidth',2);
+semilogx(epsilon,max(1-err_sspa_min), '-.','LineWidth',2);
+semilogx(epsilon,max(1-err_sspa_mid), ':', 'LineWidth',2);
+semilogx(epsilon,max(1-err_sspa_mean),'--','LineWidth',2);
+ylim([0 1])
 xlabel('level of noise - $\epsilon$','Interpreter','latex','FontSize',font_size);
 ylabel('Accuracy','Interpreter','latex','FontSize',font_size);
-legend(labels,'Location','northwest','Orientation','horizontal','Interpreter','latex','FontSize',font_size);
-title('Best among trials - Accuracy','Interpreter','latex','FontSize',font_size); grid on;
-savefig(fig(5), fullfile(outDir,'Best_Acc.fig'));
+legend(labels,'Location','northwest','Orientation','vertical','Interpreter','latex','FontSize',font_size)
+title('Best among trials - Accuracy','Interpreter','latex','FontSize',font_size)
+grid on; set(gca,'XScale','log');
+savefig(fig(5), fullfile(yourFolder,"Best_Acc.fig"))
 
+%% Best among trials - Relative distance ||W# - W||_F / ||W#||_F
 fig(6) = figure;
-semilogx(epsilon, min(distW_fgnsr), '-x','LineWidth',2); hold on;
-semilogx(epsilon, min(distW_spa),   '-*','LineWidth',2);
-semilogx(epsilon, min(distW_alg1),  '-', 'LineWidth',2);
-semilogx(epsilon, min(distW_sspa),  '-.','LineWidth',2);
-ylim([0 1]);
+semilogx(epsilon,min(distW_fgnsr),    '-x','LineWidth',2); hold on
+semilogx(epsilon,min(distW_spa),      '-*','LineWidth',2);
+semilogx(epsilon,min(distW_alg1),     '-', 'LineWidth',2);
+semilogx(epsilon,min(distW_sspa_min), '-.','LineWidth',2);
+semilogx(epsilon,min(distW_sspa_mid), ':', 'LineWidth',2);
+semilogx(epsilon,min(distW_sspa_mean),'--','LineWidth',2);
+ylim([0 1])
 xlabel('level of noise - $\epsilon$','Interpreter','latex','FontSize',font_size);
-ylabel('$\| W^\# - W \|_F / \| W^\# \|_F$','Interpreter','latex','FontSize',font_size);
-legend(labels,'Location','northwest','Orientation','horizontal','Interpreter','latex','FontSize',font_size);
-title('Best among trials - Relative distance w.r.t. $W^\#$','Interpreter','latex','FontSize',font_size); grid on;
-savefig(fig(6), fullfile(outDir,'Best_distW.fig'));
+ylabel('$\frac{\| W^\# - W \|_F}{\| W^\# \|_F}$','Interpreter','latex','FontSize',font_size);
+legend(labels,'Location','northwest','Orientation','vertical','Interpreter','latex','FontSize',font_size)
+title('Best among trials - Relative distance w.r.t. $W^\#$','Interpreter','latex','FontSize',font_size)
+grid on;
+savefig(fig(6), fullfile(yourFolder,"Best_distW.fig"))
+
 
 %% ------------------------------------------------------------------------
-%% Local helper: build H1 as pairwise midpoints (modular in r and n1)
+%% Helper: build H1 as pairwise midpoints (modular in r and n1)
 %% ------------------------------------------------------------------------
 function [H1, n1_used] = build_midpoints_block(r, mode, n1_req)
     pairs_all = nchoosek(1:r, 2);     % all unordered pairs
@@ -263,4 +314,3 @@ function [H1, n1_used] = build_midpoints_block(r, mode, n1_req)
         H1(pairs_sel(k,2), k) = 0.5;
     end
 end
-

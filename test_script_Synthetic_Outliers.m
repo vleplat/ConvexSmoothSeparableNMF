@@ -102,7 +102,7 @@ close all
 %%%   Average plots  %%%
 %%%------------------%%%
 %%% Relative Frobenius errors
-font_size = 16;
+font_size = 20;
 fig(1) = figure;
 errorbar(outliers,mean(err_alg1_av,1),std(err_alg1_av,1),'-x','LineWidth',2)
 hold on
@@ -123,7 +123,7 @@ savefig(fig(1),"Outputs_script/Aver_RelFro_Outliers.fig")
 %%%------------------%%%
 
 %%% Relative Frobenius errors
-font_size = 14;
+font_size = 20;
 fig(2) = figure;
 plot(outliers,min(err_alg1_av),'-x','LineWidth',2)
 hold on
