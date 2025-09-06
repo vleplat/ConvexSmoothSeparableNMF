@@ -53,128 +53,169 @@ nplp = 5; % actual value computed later
 % [X_fgnsr, K_fgnsr_1] = fgnsr_alg1(M, r, 'maxiter', 200);
 [X_fgnsr, K_fgnsr_1] = fgnsr_alg1(M, r, 'maxiter', 200, 'mu',0.5);
 
-%% 
-% Help chosing a value for delta
-close all
+%% ------------------------------------------------------------------------
+%% Samson — CSSNMF vs SPA vs SSPA (same flow as Jasper)
+%% ------------------------------------------------------------------------
+
+% ---- Choose delta via quick histogram (same as Jasper) -------------------
+close all;
 histogram(sum(X_fgnsr,2));
-%% 
-options.delta=1.08;
-options.agregation = 0;
-options.clustering = 0;
-[W_fgnsr,H_fgnsr,K_fgnsr,Wfgnsr] = alg2(M,X_fgnsr,r,options);
-% compute the Relative Frobenius Error 
-res_fgnsr = norm(M-W_fgnsr*H_fgnsr,'fro')./norm(M,'fro')
 
-%% SPA/SSPA
-%% Selection of best nplp
-res_spa_list = [];
-for nplp=10:50:1200
-    [W_spa,K_spa] = SSPA(M, r, nplp);
-    H_spa=nnlsHALSupdt_new(W_spa'*M,W_spa,[],1000);
-    % compute the Relative Frobenius Error 
-    res_spa_list = [res_spa_list norm(M-W_spa*H_spa,'fro')./norm(M,'fro')];
+% ---- Postprocessing options (same style as Jasper) -----------------------
+options.delta      = 1.08;   % dataset-specific; keep your good value
+options.agregation = 1;      % 1: median (as in Jasper); 0: average
+options.clustering = 1;      % 1: kmeans (as in Jasper); 0: spectral
+options.type       = 1;      % spectral clustering variant id
+options.modeltype  = 1;      % NNLS
+
+% ---- CSSNMF (Alg. 1 + 2) -------------------------------------------------
+[W_fgnsr, H_fgnsr, K_fgnsr, ~] = alg2(M, X_fgnsr, r, options);
+res_fgnsr = norm(M - W_fgnsr*H_fgnsr, 'fro') / norm(M, 'fro');
+%%
+% ---- SPA baseline (pure SPA) ---------------------------------------------
+K_spa_pure  = FastSepNMF(M, r, 0);
+W_spa_pure  = M(:, K_spa_pure);
+H_spa_pure  = nnlsHALSupdt_new(W_spa_pure' * M, W_spa_pure, [], 1000);
+res_spa_pure = norm(M - W_spa_pure*H_spa_pure, 'fro') / norm(M, 'fro');
+
+% ---- SSPA: pick nplp by quick sweep (same idea as Jasper) ----------------
+res_sspa_sweep = [];
+for nplp_test = 10:50:2000
+    [W_tmp, ~]  = SSPA(M, r, nplp_test);
+    H_tmp       = nnlsHALSupdt_new(W_tmp' * M, W_tmp, [], 1000);
+    res_sspa_sweep(end+1) = norm(M - W_tmp*H_tmp, 'fro') / norm(M, 'fro'); 
 end
-% Display error w.r.t. nplp values
-figure;
-plot(10:50:1200,res_spa_list);
-grid on
-xlabel('nplp')
-ylabel('Rel. Frob. Error.')
-% Conclusion: lowest value reached for nplp = 1200;
-%% Run SSPA for nplp computed above
-nplp = 1200;
-Options.average = 0; % 1 mean , 0 median (default)
-[W_spa,K_spa] = SSPA(M, r, nplp, Options);
-H_spa=nnlsHALSupdt_new(W_spa'*M,W_spa,[],1000);
-% compute the Relative Frobenius Error 
-res_spa=norm(M-W_spa*H_spa,'fro')./norm(M,'fro');
+figure; plot(10:50:2000, res_sspa_sweep, '-o'); grid on;
+xlabel('nplp'); ylabel('Rel. Frob. Error');
+title('SSPA nplp sweep (Samson)');
 
-%%-------------------------------------------------------------------------
-%% Display some results
-%%-------------------------------------------------------------------------
-%% Abundance maps
-close all
-A = H_true;
-H_fgnsr_re= matchCol(H_fgnsr',A')';
-H_spa_re= matchCol(H_spa',A')';
+% ----- Choose your best nplp from the sweep (example below) ---------------
+nplp = 1200;             % <- keep your tuned value
+Options.average = 0;     % 0: median (default), 1: mean
+[W_sspa, ~]  = SSPA(M, r, nplp, Options);
+H_sspa       = nnlsHALSupdt_new(W_sspa' * M, W_sspa, [], 1000);
+res_sspa     = norm(M - W_sspa*H_sspa, 'fro') / norm(M, 'fro');
 
-affichage(H_true',3,95,95);          %groudtruth 
-affichage(H_fgnsr_re',3,95,95);      %estimated CSSNMF
-affichage(H_spa_re',3,95,95);        %estimated SSPA
+%% ------------------------------------------------------------------------
+%% Align to ground truth (W_true, H_true) and compute metrics
+%% ------------------------------------------------------------------------
+A = H_true;                   % GT abundances (r x N)
+B = W_true;                   % GT endmembers (m x r)
 
-%% Spectral signatures
-close all
-B = W_true;
-W_fgnsr_re= matchCol(W_fgnsr,W_true);
-W_spa_re= matchCol(W_spa,W_true);
-x=1:156; 
+% H alignment (columns are pixels)
+H_cssnmf_re   = matchCol(H_fgnsr', A')';
+H_spa_pure_re = matchCol(H_spa_pure', A')';
+H_sspa_re     = matchCol(H_sspa', A')';
 
-% markers = {'o','+','*','s','d','v','>','h'};
-colors = {'b','k','r','g','c','m'};
+% W alignment
+W_cssnmf_re   = matchCol(W_fgnsr, B);
+W_spa_pure_re = matchCol(W_spa_pure, B);
+W_sspa_re     = matchCol(W_sspa, B);
+
+% Relative W-errors (scale-invariant via column normalization)
+normc = @(X) X ./ sum(X,1);
+dW_cssnmf   = norm( normc(W_cssnmf_re) - normc(B), 'fro') / norm(normc(B),'fro');
+dW_spa_pure = norm( normc(W_spa_pure_re) - normc(B), 'fro') / norm(normc(B),'fro');
+dW_sspa     = norm( normc(W_sspa_re)     - normc(B), 'fro') / norm(normc(B),'fro');
+
+% Global SSIM (same choice as Jasper: no extra row-wise scaling)
+ssim_CSSNMF   = ssim(H_cssnmf_re,   A);
+ssim_SPA_pure = ssim(H_spa_pure_re, A);
+ssim_SSPA     = ssim(H_sspa_re,     A);
+
+% Per-map SSIM (each row reshaped to 95×95)
+term_cssnmf = zeros(1,r);
+term_spa    = zeros(1,r);
+term_sspa   = zeros(1,r);
+for t = 1:r
+    gt_map   = reshape(A(t,:)/max(A(t,:)),                 [95 95]);
+    f_map    = reshape(H_cssnmf_re(t,:)/max(H_cssnmf_re(t,:)), [95 95]);
+    s_map    = reshape(H_spa_pure_re(t,:)/max(H_spa_pure_re(t,:)), [95 95]);
+    p_map    = reshape(H_sspa_re(t,:)/max(H_sspa_re(t,:)),  [95 95]);
+    term_cssnmf(t) = ssim(f_map, gt_map);
+    term_spa(t)    = ssim(s_map, gt_map);
+    term_sspa(t)   = ssim(p_map, gt_map);
+end
+
+%% ------------------------------------------------------------------------
+%% Abundance maps — save EPS (GT, CSSNMF, SPA, SSPA)
+%% ------------------------------------------------------------------------
+outDir = 'figs_numTests_HSI_Samson'; if ~isfolder(outDir), mkdir(outDir); end
+close all;
+
+% Display via your helper and save each as EPS
+affichage(A',            r, 95, 95);      title('GT (Samson)');
+print('-depsc2', fullfile(outDir, 'Abundances_GT.eps'));      close;
+
+affichage(H_cssnmf_re',  r, 95, 95);      title('CSSNMF');
+print('-depsc2', fullfile(outDir, 'Abundances_cssnmf.eps'));  close;
+
+affichage(H_spa_pure_re',r, 95, 95);      title('SPA');
+print('-depsc2', fullfile(outDir, 'Abundances_SPA.eps'));     close;
+
+affichage(H_sspa_re',    r, 95, 95);      title('SSPA');
+print('-depsc2', fullfile(outDir, 'Abundances_SSPA.eps'));    close;
+
+%% ------------------------------------------------------------------------
+%% Signatures panel (2×2): GT | CSSNMF ; SPA | SSPA  -> EPS
+%% ------------------------------------------------------------------------
+x = 1:size(M,1);
+colors    = {'b','k','r','g','c','m'};
 linestyle = {'-','--','-.',':'};
+getFirst  = @(v)v{1};
+getprop   = @(opts, idx)getFirst(circshift(opts, -idx+1));
+linew     = 1.5; fontSize = 13;
 
-getFirst = @(v)v{1}; 
-getprop = @(options, idx)getFirst(circshift(options,-idx+1));
-linew = 1.5;
-fontSize = 14;
+figure('Units','normalized','Position',[0.2 0.2 0.6 0.6]);
 
-figure
-subplot(1,2,1) %groudtruth 
+% GT
+subplot(2,2,1);
+hold on;
 for t=1:r
-    gt(:,t)=B(:,t)/sum(B(:,t)); hold on 
-    plot(x,gt(:,t),'color',getprop(colors,t),'linestyle',getprop(linestyle,t),'LineWidth',linew)
-    % axis([0 156 0 1])
-    set(gca,'xlim',[1 156]);
+    gt(:,t) = B(:,t)/sum(B(:,t));
+    plot(x, gt(:,t), 'Color', getprop(colors,t), 'LineStyle', getprop(linestyle,t), 'LineWidth', linew);
 end
-title('Ground-truth','Interpreter','latex','FontSize',fontSize) 
-legend('Rock','Tree', 'Water','Interpreter','latex','FontSize',fontSize); 
-xlabel('Spectral band no.','Interpreter','latex','FontSize',fontSize); 
-grid on
- 
-subplot(1,2,2)
+xlim([1, numel(x)]); grid on; title('Ground truth','Interpreter','latex','FontSize',fontSize);
+
+% CSSNMF
+subplot(2,2,2);
+hold on;
 for t=1:r
-    y(:,t)=W_fgnsr_re(:,t)/sum(W_fgnsr_re(:,t));
-    y_spa(:,t)=W_spa_re(:,t)/sum(W_spa_re(:,t));
-    hold on
-    plot(x,y(:,t),'color',getprop(colors,t),'linestyle',getprop(linestyle,t),'LineWidth',linew)
-    % axis([0 156 0 1])
-    set(gca,'xlim',[1 156]);
+    y_css(:,t) = W_cssnmf_re(:,t)/sum(W_cssnmf_re(:,t));
+    plot(x, y_css(:,t), 'Color', getprop(colors,t), 'LineStyle', getprop(linestyle,t), 'LineWidth', linew);
 end
-title('CSSNMF','Interpreter','latex','FontSize',fontSize) 
-legend('Rock','Tree', 'Water','Interpreter','latex','FontSize',fontSize); 
-xlabel('Spectral band no.','Interpreter','latex','FontSize',fontSize); 
-grid on
+xlim([1, numel(x)]); grid on; title('CSSNMF','Interpreter','latex','FontSize',fontSize);
 
-%% Compute SSIM - globally
-
-ssim_CSSNMF=ssim(diag(1./max(H_fgnsr_re,[],2))*H_fgnsr_re,diag(1./max(A,[],2))*A);
-ssim_SSPA=ssim(diag(1./max(H_spa_re,[],2))*H_spa_re,diag(1./max(A,[],2))*A);
-
-% ssim_CSSNMF=ssim(H_fgnsr_re,A);
-% ssim_SSPA=ssim(H_spa_re,A);
-
-%% Display Rel. Frob. Errors and SSIM
-clc
-disp('------------------------------------      CSSNMF  |    SSPA    -----------------')
-fprintf('Rel. Frob Error (lower the better):     %2.4e|  %2.4e  \n', res_fgnsr,res_spa);
-fprintf('SSIM (1 best):                           %2.2e |  %2.2e  \n', ssim_CSSNMF,ssim_SSPA);
-fprintf('||W-W#||_F/||W#||_F (lower the better):  %2.2e |  %2.2e  \n', norm(y-gt,'fro')/norm(gt,'fro')*100,norm(y_spa-gt,'fro')/norm(gt,'fro')*100);
-disp('----------------------------------------------------------------------------------------------------------')
-
-%% Compute SSIM - per map 
-term_cssnmf = [];
+% SPA
+subplot(2,2,3);
+hold on;
 for t=1:r
-    term_cssnmf = [term_cssnmf ssim(reshape(H_fgnsr_re(t,:)/max(H_fgnsr_re(t,:)),[95 95]),reshape(A(t,:)/max(A(t,:)),[95 95]))];
+    y_spa(:,t) = W_spa_pure_re(:,t)/sum(W_spa_pure_re(:,t));
+    plot(x, y_spa(:,t), 'Color', getprop(colors,t), 'LineStyle', getprop(linestyle,t), 'LineWidth', linew);
 end
-disp('----------------- CSSNMF --------------------')
-term_cssnmf
-mean(term_cssnmf)
-disp('---------------------------------------------')
-term_sspa = [];
+xlim([1, numel(x)]); grid on; title('SPA','Interpreter','latex','FontSize',fontSize);
+
+% SSPA
+subplot(2,2,4);
+hold on;
 for t=1:r
-    term_sspa = [term_sspa ssim(reshape(H_spa_re(t,:)/max(H_spa_re(t,:)),[95 95]),reshape(A(t,:)/max(A(t,:)),[95 95]))];
+    y_sspa(:,t) = W_sspa_re(:,t)/sum(W_sspa_re(:,t));
+    plot(x, y_sspa(:,t), 'Color', getprop(colors,t), 'LineStyle', getprop(linestyle,t), 'LineWidth', linew);
 end
-disp('----------------- SSPA --------------------')
-term_sspa
-mean(term_sspa)
-disp('---------------------------------------------')
+xlim([1, numel(x)]); grid on; title(sprintf('SSPA (nplp=%d)', nplp),'Interpreter','latex','FontSize',fontSize);
+
+sgtitle('Endmember spectral signatures — Samson','Interpreter','latex');
+print('-depsc2', fullfile(outDir, 'signatures_grid.eps'));
+close;
+
+%% ------------------------------------------------------------------------
+%% Console summary (same style as Jasper)
+%% ------------------------------------------------------------------------
+clc;
+disp('---------------------  CSSNMF  |    SPA     |    SSPA   ---------------------');
+fprintf('Rel. Frob Error (lower is better):  %8.4e | %8.4e | %8.4e\n', res_fgnsr, res_spa_pure, res_sspa);
+fprintf('SSIM (1 best):                      %8.4f | %8.4f | %8.4f\n', ssim_CSSNMF, ssim_SPA_pure, ssim_SSPA);
+fprintf('Rel. W-error (||W#-W||/||W#||):     %8.4e | %8.4e | %8.4e\n', dW_cssnmf, dW_spa_pure, dW_sspa);
+disp('Per-map SSIM (mean over materials):');
+fprintf('  CSSNMF: %.4f   SPA: %.4f   SSPA: %.4f\n', mean(term_cssnmf), mean(term_spa), mean(term_sspa));
+disp('-----------------------------------------------------------------------------');
