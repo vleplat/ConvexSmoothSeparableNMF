@@ -7,7 +7,7 @@ This MATLAB software reproduces the results from the following paper:
 @article{Pan_Gillis_leplat2025,
       title={A provably-correct convex model for smooth separable NMF}, 
       author={Junjun Pan and Valentin Leplat and Michael Ng and Nicolas Gillis},
-      year={2024},
+      year={2025},
       journal={arXiv preprint arXiv:XYZZ.00007} 
 }
 ```
