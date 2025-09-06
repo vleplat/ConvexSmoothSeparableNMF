@@ -34,7 +34,18 @@ The baseline algorithms used in the manuscript are courtesy of their respective 
 
  - test files detailed in next Section
 
-ATTENTION: to use our method, first download the FGNSR MATLAB framework, compile the mex files for your computer. Finally, copy paste the file "fgnsr_alg1_copy_to_move_later.m" currently in "/Methods" to ./Libraries/FGNSR-master/matlab, and rename it in "fgnsr_alg1.m"
+ATTENTION: 
+ - to use our method, first download the FGNSR MATLAB framework, compile the mex files for your computer. Finally, copy paste the file "fgnsr_alg1_copy_to_move_later.m" currently in "/Methods" to ./Libraries/FGNSR-master/matlab, and rename it in "fgnsr_alg1.m"
+ - second, consider this replacement for competitor fgnsr.mr to improve its efficiency in this setting
+      "% Replace
+      [~, K] = sort(diag(X), 'descend');
+      K = K(1:rold);
+      if ~isempty(subset)
+          K = subset(K);
+      end
+      % With 
+      K = SPA(X',r);"
+The SPA function can be downloaded at https://gitlab.com/ngillis/nmfbook/-/blob/master/algorithms/separable%20NMF/SPA/SPA.m?ref_type=heads
    
 ## Test files
  
