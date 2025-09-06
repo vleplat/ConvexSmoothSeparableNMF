@@ -436,11 +436,12 @@ end
 % Force a log line for the last feeded iteration data ("flush")
 iter_log();
 
-[~, K] = sort(diag(X), 'descend');
-K = K(1:rold);
-if ~isempty(subset)
-    K = subset(K);
-end
+% [~, K] = sort(diag(X), 'descend');
+% K = K(1:rold);
+% if ~isempty(subset)
+%     K = subset(K);
+% end
+K = SPA(X',r);
 
 K = reshape(K, 1, length(K));
 
