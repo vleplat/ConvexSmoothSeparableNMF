@@ -36,7 +36,7 @@ The baseline algorithms used in the manuscript are courtesy of their respective 
 
 ATTENTION: 
  - to use our method, first download the FGNSR MATLAB framework, compile the mex files for your computer. Finally, copy paste the file "fgnsr_alg1_copy_to_move_later.m" currently in "/Methods" to ./Libraries/FGNSR-master/matlab, and rename it in "fgnsr_alg1.m"
- - second, consider this replacement for competitor fgnsr.mr to improve its efficiency in this setting
+ - second, consider the following replacement for competitor fgnsr.mr to improve its efficiency in our setting
       "% Replace
       [~, K] = sort(diag(X), 'descend');
       K = K(1:rold);
