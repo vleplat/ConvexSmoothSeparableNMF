@@ -1,6 +1,5 @@
 addpath(genpath(pwd));
 clc; clear;
-rng(2025);
 
 %% ------------------------------------------------------------------------
 %% Middle points + adversarial noise (modular in r and n1)
@@ -47,6 +46,7 @@ options.agregation = 1;      % 0: average, 1: median   (median here)
 options.clustering = 0;      % 0: spectral, 1: kmeans
 
 for j = 1:iter
+    rng(2020+j)
     % --- Pure block (H0) and middle-point block (H1) ---------------------
     H0 = PB(n0, r, 1)';                                 % r x n0, one-hot
     [H1, n1_used] = build_midpoints_block(r, midpoint_mode, n1_requested);  % r x n1
