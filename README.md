@@ -30,7 +30,7 @@ The baseline algorithms used in the manuscript are courtesy of their respective 
  - /Utils : contains helpful files and MatLab routines to run the demos.
    
  - /Methods: contains the MatLab implementations of the Algorithms 1 and 2 developped in the paper.
- - /Results: all the results can be downloaded from https://www.dropbox.com/scl/fo/w3jc5x54oivzrs8m41j2s/ADH7gnCR3RMrYxKuyDowtP4?rlkey=gz3zxjgtwt55j4zjhh4f0xmf8&st=2wbztn45&dl=0 
+ - /Results: all the HSI results can be downloaded from "insert link later"
 
  - test files detailed in next Section
 
@@ -40,10 +40,10 @@ ATTENTION: to use our method, first download the FGNSR MATLAB framework, compile
  
  Test files are available. To proceed, open and start one of the following files:
  
-- test_script_Synthetic_Diri.m : run demo for Synthetic test with M = W*[H0 H1] + N, where H0 has disjoint row supports and H1 follows a Dirichlet Distribition, see Section 6.1 of the paper. 
-- test_script_Synthetic_Outliers.m : run demo for the comparison of aggregation techniques, that is mean vs median, see Section 6.2 of the paper. 
-- test_script_Synthetic_Middle.m : run additional test, dubbed as Middle points and adversarial noise, check the content of the file to get the details.
-- test_script_HSI_XX.m : run demo for Hyperspectral Image Unmixing for three data sets XX={JasperRidge, Urban, Samson}, section 6.2 of the paper.
+- test_script_Synthetic_Random_Diri.m : run demo for Synthetic test with M = W*[H0 H1] + N, where H0 has disjoint row supports and H1 follows a Dirichlet Distribition, see Section 5.1.1 of the paper. 
+- test_script_Synthetic_Outliers.m : run demo for the comparison of aggregation techniques, that is mean vs median, see Section 5.1.3 of the paper. 
+- test_script_Synthetic_Middle.m : run additional test, dubbed as Middle points and adversarial noise, check the content of the file to get the detail, section 5.1.2 of the paper.
+- test_script_HSI_XX.m : run demo for Hyperspectral Image Unmixing for three data sets XX={JasperRidge, Urban, Samson}, section 5.2 of the paper.
 
 ## References
 
