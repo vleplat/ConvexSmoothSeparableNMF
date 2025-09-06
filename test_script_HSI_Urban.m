@@ -2,9 +2,9 @@ addpath(genpath(pwd));
 clc
 clear
 disp('----------------------------------------------------------------------------------------------------------')
-disp("HSI test - Urban data set - Paper Section 6 ")
+disp("HSI test - Urban data set - Paper Section 5.2 ")
 disp("The computation of X can take approximatively 45 minutes on a recent laptop...")
-disp("You can directly load the .mat ./Results/HSI/Urban and start playing with the code starting from line 55")
+disp("You can directly load the .mat ./Results/HSI/Urban and start playing with the code starting from line 59")
 disp('----------------------------------------------------------------------------------------------------------')
 
 %%-------------------------------------------------------------------------
@@ -56,166 +56,166 @@ nplp = 150; % actual value computed later
 % [X_fgnsr, K_fgnsr_1] = fgnsr_alg1(M, r, 'maxiter', 200);
 [X_fgnsr, K_fgnsr_1] = fgnsr_alg1(Ms, r, 'maxiter', 400, 'mu',0.5);
 
-%% 
-% Help chosing a value for delta
-close all
-histogram(summ(X_fgnsr,2));
-%% Selection of best delta
-res_fgnsr_s_list = [];
-res_SSIM_s_list = [];
-for delta=0.2:0.1:1.8
-    options.delta = delta;
-    [W_fgnsr_s,H_fgnsr_s,K_fgnsr_s,Wfgnsr_s] = alg2(Ms,X_fgnsr,r,options);
-    res_fgnsr_s_list = [res_fgnsr_s_list norm(Ms-W_fgnsr_s*H_fgnsr_s,'fro')./norm(Ms,'fro')];
-    H_fgnsr=nnlsHALSupdt_new(W_fgnsr_s'*M,W_fgnsr_s,[],1000);
-    H_fgnsr_re= matchCol(H_fgnsr',A')';
-    res_SSIM_s_list = [res_SSIM_s_list ssim(H_fgnsr_re,A);]
-end
-close all;
-figure;
-plot(0.2:0.1:1.8,res_fgnsr_s_list);
-grid on
-xlabel('delta')
-ylabel('Rel. Frob. Error.')
+%% ------------------------------------------------------------------------
+%% Urban (full image) – CSSNMF vs SPA vs SSPA (tuned nplp)
+%% Assumes M (162 x 307*307), W_true (162 x 6), H_true (6 x 307*307), r = 6
+%% ------------------------------------------------------------------------
+% ------------ CSSNMF (Alg. 1 + Alg. 2 postproc) --------------------------
+% Compute X (already done earlier typically). Example:
+% [X_fgnsr, ~] = fgnsr_alg1(M, r, 'maxiter', 400, 'mu', 80);
 
-close all;
-figure;
-plot(0.2:0.1:1.8,res_SSIM_s_list);
-grid on
-xlabel('delta')
-ylabel('SSIM')
+% Help choosing delta
+close all
+histogram(sum(X_fgnsr,2)); grid on; title('Histogram of row-sums of X');
+
+% Final delta (set after quick visual scan or micro-grid)
+options.delta      = 1.05;   % was ~1.04–1.10 in earlier runs; adjust if needed
+options.type       = 1;      % spectral clustering variant
+options.modeltype  = 1;      % NNLS (mixed model)
+options.agregation = 0;      % 0 average, 1 median  (Urban often favored average)
+options.clustering = 0;      % 0 spectral, 1 kmeans
+
+[W_css,H_css_s,~,~] = alg2(Ms, X_fgnsr, r, options);
+H_css=nnlsHALSupdt_new(W_css'*M,W_css,[],1000);
+res_css = norm(M - W_css*H_css, 'fro') / norm(M, 'fro');
+%% If data are loaded from .mat available online
+res_css = res_fgnsr;
+W_css = W_fgnsr;
+H_css = H_fgnsr;
+%%
+% ------------ SPA baseline ------------------------------------------------
+K_spa  = FastSepNMF(Ms, r, 0);
+W_spa  = Ms(:, K_spa);
+H_spa  = nnlsHALSupdt_new(W_spa' * M, W_spa, [], 1000);
+res_spa = norm(M - W_spa*H_spa, 'fro') / norm(M, 'fro');
+
+% ------------ SSPA (grid over nplp, then final run) ----------------------
+res_sspa_grid = [];
+nplp_grid = 10:50:1000;      % adjust grid if runtime is too long
+for nplp = nplp_grid
+    [W_tmp, ~]  = SSPA(Ms, r, nplp);
+    H_tmp       = nnlsHALSupdt_new(W_tmp' * M, W_tmp, [], 1000);
+    res_sspa_grid(end+1) = norm(M - W_tmp*H_tmp, 'fro') / norm(M, 'fro'); 
+end
+
+figure; plot(nplp_grid, res_sspa_grid, '-o'); grid on
+xlabel('nplp'); ylabel('Rel. Frob. Error');
+title('SSPA: Rel. Frob. Error vs nplp (Urban, full image)');
+
+[~, idx_best] = min(res_sspa_grid);
+nplp_best = nplp_grid(idx_best);
+
+Options.average = 0; % 0 median (default), 1 mean — pick per map quality if needed
+[W_sspa, ~] = SSPA(M, r, nplp_best, Options);
+H_sspa      = nnlsHALSupdt_new(W_sspa' * M, W_sspa, [], 1000);
+res_sspa    = norm(M - W_sspa*H_sspa, 'fro') / norm(M, 'fro');
 
 %%
-options.delta=1.04;  %SSIM 7.94 for 1.4 for 200 iterations | 1.1 for 400 iterations
-options.agregation = 0;
-options.clustering = 0;
-[W_fgnsr_s,H_fgnsr_s,K_fgnsr_s,Wfgnsr_s] = alg2(Ms,X_fgnsr,r,options);
-
-% compute the Relative Frobenius Error - Sampled data set
-res_fgnsr_s = norm(Ms-W_fgnsr_s*H_fgnsr_s,'fro')./norm(Ms,'fro')
-
-% compute the Relative Frobenius Error - Full data set
-W_fgnsr = W_fgnsr_s;
-H_fgnsr=nnlsHALSupdt_new(W_fgnsr'*M,W_fgnsr,[],1000);
-res_fgnsr = norm(M-W_fgnsr_s*H_fgnsr,'fro')./norm(M,'fro')
-
-%% SPA/SSPA
-clc
-%% Selection of best nplp
-res_spa_s_list = [];
-for nplp=10:50:1000
-    [W_spa,K_spa] = SSPA(Ms, r, nplp);
-    H_spas=nnlsHALSupdt_new(W_spa'*Ms,W_spa,[],1000);
-    res_spa_s_list = [res_spa_s_list norm(Ms-W_spa*H_spas,'fro')./norm(Ms,'fro')];
-end
-% Display error w.r.t. nplp values
-figure;
-plot(10:50:1000,res_spa_s_list);
-grid on
-xlabel('nplp')
-ylabel('Rel. Frob. Error.')
-% Conclusion: lowest value reached for nplp = 110; -> based on abundance
-% maps, nplp=100 seems to be the best
-%% Final run for SSPA
-% Sampled data 
-nplp = 100;  % 
-Options.average = 0; % 1 mean , 0 median (default)
-[W_spa,K_spa] = SSPA(Ms, r, nplp);
-H_spas=nnlsHALSupdt_new(W_spa'*Ms,W_spa,[],1000);
-
-% compute the Relative Frobenius Error - Sampled data set
-res_spa_s = norm(Ms-W_spa*H_spas,'fro')./norm(Ms,'fro')
-
-% % compute the Relative Frobenius Error - Full data set
-H_spa=nnlsHALSupdt_new(W_spa'*M,W_spa,[],1000);
-res_spa=norm(M-W_spa*H_spa,'fro')./norm(M,'fro')
-
-%% -------------------------------------------------------------------------
-%%Display some results
-%%-------------------------------------------------------------------------
-%% Abundance maps - full data set
-close all
+% ------------ Align to ground truth & build displays ---------------------
 A = H_true;
-H_fgnsr_re= matchCol(H_fgnsr',A')';
-H_spa_re= matchCol(H_spa',A')';
+% Reorder H-rows to match GT (and W-columns likewise)
+H_css_re  = matchCol(H_css',  A')';
+H_spa_re  = matchCol(H_spa',  A')';
+H_sspa_re = matchCol(H_sspa', A')';
 
-affichage((diag(1./max(H_true,[],2))*H_true)',6,307,307);              %groudtruth 
-affichage((diag(1./max(H_fgnsr_re,[],2))*H_fgnsr_re)',6,307,307);      %estimated CSSNMF
-affichage((diag(1./max(H_spa_re,[],2))*H_spa_re)',6,307,307);          %estimated SSPA
+W_css_re  = matchCol(W_fgnsr,   W_true);
+W_spa_re  = matchCol(W_spa,   W_true);
+W_sspa_re = matchCol(W_sspa,  W_true);
 
-%% Spectral signatures
+% ------------ Abundance maps (scale each row by its max for visualization)
 close all
-B = W_true;
-W_fgnsr_re= matchCol(W_fgnsr,W_true);
-W_spa_re= matchCol(W_spa,W_true);
-x=1:162; 
+affichage((diag(1./max(H_true,   [],2)) * H_true   )', r, 307, 307);  % GT
+affichage((diag(1./max(H_css_re, [],2)) * H_css_re )', r, 307, 307);  % CSSNMF
+affichage((diag(1./max(H_spa_re, [],2)) * H_spa_re )', r, 307, 307);  % SPA
+affichage((diag(1./max(H_sspa_re,[],2)) * H_sspa_re)', r, 307, 307);  % SSPA
 
-% https://ch.mathworks.com/matlabcentral/answers/697655-how-can-i-plot-with-different-markers-linestyles-and-colors-in-a-loop
-markers = {'.','+','*','.','x','_','.','.'};
-colors = {'b','k','r','g','c','m'};
-linestyle = {'-','--','-.',':','-'};
-
+% ------------ Spectral signatures (2x2 tiled figure)
+close all
+x = 1:162;
+colors    = {'b','k','r','g','c','m'};
+linestyle = {'-','--','-.',':','-','-.'};
 getFirst = @(v)v{1}; 
-getprop = @(options, idx)getFirst(circshift(options,-idx+1));
-linew = 1.5;
-fontSize = 14;
-figure
-subplot(1,2,1) %groudtruth 
+getprop  = @(opt, idx)getFirst(circshift(opt,-idx+1));
+linew = 1.5; fontSize = 14;
+
+tiledlayout(2,2,'Padding','compact','TileSpacing','compact');
+
+% (1) Ground truth
+nexttile;
 for t=1:r
-    gt(:,t)=B(:,t)/sum(B(:,t)); hold on 
-    plot(x,gt(:,t),'Marker',getprop(markers,t),'color',getprop(colors,t),'linestyle',getprop(linestyle,t),'LineWidth',linew)
-    % axis([0 162 0 1])
+    gt(:,t) = W_true(:,t) / sum(W_true(:,t)); hold on
+    plot(x, gt(:,t), 'Color', getprop(colors,t), 'LineStyle', getprop(linestyle,t), 'LineWidth', linew);
     set(gca,'xlim',[1 162]);
 end
-title('Ground-truth','Interpreter','latex','FontSize',fontSize); 
-legend('Asphalt Road','Grass', 'Tree','Roof','Metal','Dirt','Interpreter','latex','FontSize',fontSize);  
-xlabel('Spectral band no.','Interpreter','latex','FontSize',fontSize); 
-grid on
- 
-subplot(1,2,2)
+title('Ground truth','Interpreter','latex','FontSize',fontSize);
+legend('Asphalt road','Grass','Tree','Roof','Metal','Dirt','Interpreter','latex','FontSize',fontSize);
+xlabel('Spectral band no.','Interpreter','latex','FontSize',fontSize); grid on
+
+% (2) CSSNMF
+nexttile;
 for t=1:r
-    y(:,t)=W_fgnsr_re(:,t)/sum(W_fgnsr_re(:,t));
-    y_spa(:,t)=W_spa_re(:,t)/sum(W_spa_re(:,t));
-    hold on
-    plot(x,y(:,t),'Marker',getprop(markers,t),'color',getprop(colors,t),'linestyle',getprop(linestyle,t),'LineWidth',linew)
-    % axis([0 162 0 1])
+    y_css(:,t) = W_css_re(:,t) / sum(W_css_re(:,t)); hold on
+    plot(x, y_css(:,t), 'Color', getprop(colors,t), 'LineStyle', getprop(linestyle,t), 'LineWidth', linew);
     set(gca,'xlim',[1 162]);
 end
-title('CSSNMF','Interpreter','latex','FontSize',fontSize); 
-legend('Asphalt Road','Grass', 'Tree','Roof','Metal','Dirt','Interpreter','latex','FontSize',fontSize); 
-xlabel('Spectral band no.','Interpreter','latex','FontSize',fontSize); 
-grid on
+title('CSSNMF','Interpreter','latex','FontSize',fontSize);
+legend('Asphalt road','Grass','Tree','Roof','Metal','Dirt','Interpreter','latex','FontSize',fontSize);
+xlabel('Spectral band no.','Interpreter','latex','FontSize',fontSize); grid on
 
-%% Compute SSIM - globally
-ssim_CSSNMF=ssim(H_fgnsr_re,A);
-ssim_SSPA=ssim(H_spa_re,A);
+% (3) SPA
+nexttile;
+for t=1:r
+    y_spa(:,t) = W_spa_re(:,t) / sum(W_spa_re(:,t)); hold on
+    plot(x, y_spa(:,t), 'Color', getprop(colors,t), 'LineStyle', getprop(linestyle,t), 'LineWidth', linew);
+    set(gca,'xlim',[1 162]);
+end
+title('SPA','Interpreter','latex','FontSize',fontSize);
+legend('Asphalt road','Grass','Tree','Roof','Metal','Dirt','Interpreter','latex','FontSize',fontSize);
+xlabel('Spectral band no.','Interpreter','latex','FontSize',fontSize); grid on
 
-% ssim_CSSNMF=ssim(diag(1./max(H_fgnsr_re,[],2))*H_fgnsr_re,diag(1./max(A,[],2))*A);
-% ssim_SSPA=ssim(diag(1./max(H_spa_re,[],2))*H_spa_re,diag(1./max(A,[],2))*A);
+% (4) SSPA
+nexttile;
+for t=1:r
+    y_sspa(:,t) = W_sspa_re(:,t) / sum(W_sspa_re(:,t)); hold on
+    plot(x, y_sspa(:,t), 'Color', getprop(colors,t), 'LineStyle', getprop(linestyle,t), 'LineWidth', linew);
+    set(gca,'xlim',[1 162]);
+end
+title(sprintf('SSPA (nplp = %d)', nplp_best),'Interpreter','latex','FontSize',fontSize);
+legend('Asphalt road','Grass','Tree','Roof','Metal','Dirt','Interpreter','latex','FontSize',fontSize);
+xlabel('Spectral band no.','Interpreter','latex','FontSize',fontSize); grid on
 
+% ------------ SSIM (global) ---------------------------------------------
+ssim_css  = ssim(H_css_re,  A);
+ssim_spa  = ssim(H_spa_re,  A);
+ssim_sspa = ssim(H_sspa_re, A);
 
-%% Display Rel. Frob. Errors and SSIM
+% ------------ Distances to W ground truth (percent) ----------------------
+dW_css  = norm(y_css  - gt, 'fro') / norm(gt,'fro') * 100;
+dW_spa  = norm(y_spa  - gt, 'fro') / norm(gt,'fro') * 100;
+dW_sspa = norm(y_sspa - gt, 'fro') / norm(gt,'fro') * 100;
+
+% ------------ Console summary -------------------------------------------
 clc
-disp('------------------------------------      CSSNMF  |    SSPA    -----------------')
-fprintf('Rel. Frob Error (lower the better):     %2.4e|  %2.4e  \n', res_fgnsr,res_spa);
-fprintf('SSIM (1 best):                           %2.2e |  %2.2e  \n', ssim_CSSNMF,ssim_SSPA);
-fprintf('||W-W#||_F/||W#||_F (lower the better):  %2.2e |  %2.2e  \n', norm(y-gt,'fro')/norm(gt,'fro')*100,norm(y_spa-gt,'fro')/norm(gt,'fro')*100);
-disp('----------------------------------------------------------------------------------------------------------')
-  
-%% Compute SSIM - per map
-term_cssnmf = [];
+disp('---------------------------- Urban (full image) ----------------------------')
+fprintf('CSSNMF: Rel. Frob = %6.4e | SSIM = %5.3f | dW%% = %6.3f\n', res_css,  ssim_css,  dW_css);
+fprintf('SPA   : Rel. Frob = %6.4e | SSIM = %5.3f | dW%% = %6.3f\n', res_spa,  ssim_spa,  dW_spa);
+fprintf('SSPA  : Rel. Frob = %6.4e | SSIM = %5.3f | dW%% = %6.3f | nplp = %d\n', ...
+        res_sspa, ssim_sspa, dW_sspa, nplp_best);
+disp('---------------------------------------------------------------------------')
+
+% ------------ (Optional) SSIM per map ------------------------------------
+term_css  = zeros(1,r);
+term_spa  = zeros(1,r);
+term_sspa = zeros(1,r);
 for t=1:r
-    term_cssnmf = [term_cssnmf ssim(reshape(H_fgnsr_re(t,:)/max(H_fgnsr_re(t,:)),[307 307]),reshape(A(t,:)/max(A(t,:)),[307 307]))];
+    term_css(t)  = ssim(reshape(H_css_re(t,: )/max(H_css_re(t,: )),  [307 307]), ...
+                        reshape(A(t,:)/max(A(t,:)),               [307 307]));
+    term_spa(t)  = ssim(reshape(H_spa_re(t,: )/max(H_spa_re(t,: )),  [307 307]), ...
+                        reshape(A(t,:)/max(A(t,:)),               [307 307]));
+    term_sspa(t) = ssim(reshape(H_sspa_re(t,:)/max(H_sspa_re(t,:)),  [307 307]), ...
+                        reshape(A(t,:)/max(A(t,:)),               [307 307]));
 end
-disp('----------------- CSSNMF --------------------')
-term_cssnmf
-mean(term_cssnmf)
-disp('---------------------------------------------')
-term_sspa = [];
-for t=1:r
-    term_sspa = [term_sspa ssim(reshape(H_spa_re(t,:)/max(H_spa_re(t,:)),[307 307]),reshape(A(t,:)/max(A(t,:)),[307 307]))];
-end
-disp('----------------- SSPA --------------------')
-term_sspa
-mean(term_sspa)
-disp('---------------------------------------------')
+disp('SSIM per material (CSSNMF):'); disp(term_css);  fprintf('Mean: %5.3f\n', mean(term_css));
+disp('SSIM per material (SPA)   :'); disp(term_spa);  fprintf('Mean: %5.3f\n', mean(term_spa));
+disp('SSIM per material (SSPA)  :'); disp(term_sspa); fprintf('Mean: %5.3f\n', mean(term_sspa));
+
