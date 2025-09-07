@@ -11,8 +11,6 @@ This MATLAB software reproduces the results from the following paper:
       journal={arXiv preprint arXiv:XYZZ.00007} 
 }
 ```
-See <INSERT ADDRESS> 
-
 ## Acknowledgements
 
 The baseline algorithms used in the manuscript are courtesy of their respective authors.
